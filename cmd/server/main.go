@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -21,6 +22,19 @@ type myServer struct {
 func (s *myServer) Hello(ctx context.Context, in *hellopb.HelloRequest) (*hellopb.HelloResponse, error) {
 	log.Printf("received: %v\n", in.GetName())
 	return &hellopb.HelloResponse{Message: fmt.Sprintf("Hello, %s!", in.GetName())}, nil
+}
+
+func (s *myServer) HelloServerStream(in *hellopb.HelloRequest, stream hellopb.GreetingService_HelloServerStreamServer) error {
+	resCount := 5
+	for i := 0; i < resCount; i++ {
+		// レスポンスを返したいときには、Sendメソッドの引数にHelloResponse型を渡すことでそれがクライアントに送信される
+		if err := stream.Send(&hellopb.HelloResponse{Message: fmt.Sprintf("Hello, %s! [%d]", in.GetName(), i)}); err != nil {
+			return err
+		}
+		time.Sleep(time.Second * 1)
+	}
+	// return文でメソッドを終了させる=ストリームの終わり
+	return nil
 }
 
 func NewMyServer() *myServer {

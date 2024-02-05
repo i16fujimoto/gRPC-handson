@@ -33,6 +33,10 @@ func main() {
 	address := "localhost:8080"
 	conn, err := grpc.Dial(
 		address,
+
+		grpc.WithUnaryInterceptor(myUnaryClientInterceptor1()),
+		grpc.WithStreamInterceptor(myStreamClientInterceptor1()),
+
 		// 昔はgrpc.WithInsecure()で同じことをしていましたが、現在google.golang.org/grpcパッケージのWithInsecure()関数はDeprecatedになっています
 		grpc.WithTransportCredentials(insecure.NewCredentials()), // insecure: コネクションでSSL/TLSを使用しない
 		grpc.WithBlock(), // コネクションが確立されるまで待機する(同期処理をする)

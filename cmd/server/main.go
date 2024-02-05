@@ -13,6 +13,9 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	hellopb "mygrpc/pkg/grpc"
 )
@@ -22,8 +25,15 @@ type myServer struct {
 }
 
 func (s *myServer) Hello(ctx context.Context, in *hellopb.HelloRequest) (*hellopb.HelloResponse, error) {
-	log.Printf("received: %v\n", in.GetName())
-	return &hellopb.HelloResponse{Message: fmt.Sprintf("Hello, %s!", in.GetName())}, nil
+	// log.Printf("received: %v\n", in.GetName())
+	// return &hellopb.HelloResponse{Message: fmt.Sprintf("Hello, %s!", in.GetName())}, nil
+
+	stat := status.New(codes.Unknown, "unknown error occurred")
+	stat, _ = stat.WithDetails(&errdetails.DebugInfo{
+		Detail: "detail reason of err",
+	})
+	err := stat.Err()
+	return nil, err
 }
 
 func (s *myServer) HelloServerStream(in *hellopb.HelloRequest, stream hellopb.GreetingService_HelloServerStreamServer) error {
@@ -102,7 +112,7 @@ func main() {
 
 	go func() {
 		log.Printf("start gRPC server on port %s", port)
-		server.Serve(listener)
+		_ = server.Serve(listener)
 	}()
 
 	// Graceful Shutdown

@@ -13,9 +13,11 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	// "google.golang.org/grpc/codes"
+	// "google.golang.org/grpc/status"
+	// "google.golang.org/genproto/googleapis/rpc/errdetails"
+
+	"google.golang.org/grpc/metadata"
 
 	hellopb "mygrpc/pkg/grpc"
 )
@@ -25,15 +27,31 @@ type myServer struct {
 }
 
 func (s *myServer) Hello(ctx context.Context, in *hellopb.HelloRequest) (*hellopb.HelloResponse, error) {
-	// log.Printf("received: %v\n", in.GetName())
-	// return &hellopb.HelloResponse{Message: fmt.Sprintf("Hello, %s!", in.GetName())}, nil
+	// Unary RPCの場合には、メソッドの第一引数で受け取ったコンテキストをそのまま使えばOK
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		log.Printf("metadata: %v\n", md)
+	}
 
-	stat := status.New(codes.Unknown, "unknown error occurred")
-	stat, _ = stat.WithDetails(&errdetails.DebugInfo{
-		Detail: "detail reason of err",
-	})
-	err := stat.Err()
-	return nil, err
+	// メタデータを生成した後、それぞれgrpc.SetHeader関数とgrpc.SetTrailerを用いてヘッダーとトレーラーを指定する
+	headerMD := metadata.New(map[string]string{"type": "unary", "from": "server", "in": "header"})
+	if err := grpc.SetHeader(ctx, headerMD); err != nil {
+		return nil, err
+	}
+
+	trailerMD := metadata.New(map[string]string{"type": "unary", "from": "server", "in": "trailer"})
+	if err := grpc.SetTrailer(ctx, trailerMD); err != nil {
+		return nil, err
+	}
+
+	log.Printf("received: %v\n", in.GetName())
+	return &hellopb.HelloResponse{Message: fmt.Sprintf("Hello, %s!", in.GetName())}, nil
+
+	// stat := status.New(codes.Unknown, "unknown error occurred")
+	// stat, _ = stat.WithDetails(&errdetails.DebugInfo{
+	// 	Detail: "detail reason of err",
+	// })
+	// err := stat.Err()
+	// return nil, err
 }
 
 func (s *myServer) HelloServerStream(in *hellopb.HelloRequest, stream hellopb.GreetingService_HelloServerStreamServer) error {
@@ -67,6 +85,18 @@ func (s *myServer) HelloClientStream(stream hellopb.GreetingService_HelloClientS
 }
 
 func (s *myServer) HelloBiStreams(stream hellopb.GreetingService_HelloBiStreamsServer) error {
+	// NOTE: Stream RPCの場合にはストリーム型のContextメソッドから取り出す必要あり
+	if md, ok := metadata.FromIncomingContext(stream.Context()); ok {
+		log.Println(md)
+	}
+
+	headerMD := metadata.New(map[string]string{"type": "stream", "from": "server", "in": "header"})
+	if err := stream.SetHeader(headerMD); err != nil {
+		return err
+	}
+	trailerMD := metadata.New(map[string]string{"type": "stream", "from": "server", "in": "trailer"})
+	stream.SetTrailer(trailerMD)
+
 	for {
 		// クライアントからのリクエストを受け取るためのメソッドRecvを呼び出す
 		req, err := stream.Recv()

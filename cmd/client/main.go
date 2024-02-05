@@ -15,6 +15,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
+	"google.golang.org/grpc/metadata"
+
 	// これを忘れると、実行時にditailに[proto: not found]というエラーが出てしまう
 	// デシリアライズする際に、protoファイルを参照するために必要
 	_ "google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -22,7 +24,7 @@ import (
 
 var (
 	scanner *bufio.Scanner
-	client hellopb.GreetingServiceClient
+	client  hellopb.GreetingServiceClient
 )
 
 func main() {
@@ -82,8 +84,17 @@ func Hello() {
 	name := scanner.Text()
 
 	req := &hellopb.HelloRequest{Name: name}
+
+	ctx := context.Background()
+	md := metadata.New(map[string]string{"type": "unary", "from": "client"})
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
 	// NewGreetingServiceClient関数で生成したクライアントは、サービスのHelloメソッドにリクエストを送るためのメソッドHelloを持っている
-	res, err := client.Hello(context.Background(), req)
+	var header, trailer metadata.MD
+	// header, trailerを受け取るためのgrpc.Headerとgrpc.Trailerを使って、ヘッダーとトレーラーを受け取る
+	// このCallOption付きでメソッドを呼び出すと、grpc.Header・grpc.Trailer関数に引数として渡したメタデータ型に、レスポンス受信時に取得したヘッダー・トレーラーのデータが格納される
+	res, err := client.Hello(ctx, req, grpc.Header(&header), grpc.Trailer(&trailer))
+
 	if err != nil {
 		if stat, ok := status.FromError(err); ok {
 			fmt.Printf("code: %s\n", stat.Code())
@@ -95,6 +106,9 @@ func Hello() {
 			return
 		}
 	}
+
+	fmt.Println(header)
+	fmt.Println(trailer)
 	log.Printf("Greeting: %s", res.GetMessage())
 }
 
@@ -160,7 +174,11 @@ func HelloClientStream() {
 }
 
 func HelloBiStreams() {
-	stream, err := client.HelloBiStreams(context.Background())
+	ctx := context.Background()
+	md := metadata.New(map[string]string{"type": "stream", "from": "client"})
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	stream, err := client.HelloBiStreams(ctx)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -186,9 +204,9 @@ func HelloBiStreams() {
 			if sendCount == sendNum {
 				sendEnd = true
 				/*
-				client.HelloBiStreamsから得られるストリームは、SendメソッドとRecvメソッド以外にも、
-				grpc.ClientStreamインタフェースが持つメソッドセットも使うことができます。
-				CloseSendメソッドは、まさにgrpc.ClientStreamインターフェース由来のメソッドです。
+					client.HelloBiStreamsから得られるストリームは、SendメソッドとRecvメソッド以外にも、
+					grpc.ClientStreamインタフェースが持つメソッドセットも使うことができます。
+					CloseSendメソッドは、まさにgrpc.ClientStreamインターフェース由来のメソッドです。
 				*/
 				if err := stream.CloseSend(); err != nil {
 					fmt.Println(err)
@@ -196,7 +214,16 @@ func HelloBiStreams() {
 			}
 		}
 
+		var headerMD metadata.MD
 		if !recvEnd {
+			if headerMD == nil {
+				headerMD, err = stream.Header()
+				if err != nil {
+					fmt.Println(err)
+				} else {
+					fmt.Println(headerMD)
+				}
+			}
 			res, err := stream.Recv()
 			if errors.Is(err, io.EOF) {
 				recvEnd = true
@@ -207,4 +234,6 @@ func HelloBiStreams() {
 			log.Println(res.GetMessage())
 		}
 	}
+	trailerMD := stream.Trailer()
+	fmt.Println(trailerMD)
 }

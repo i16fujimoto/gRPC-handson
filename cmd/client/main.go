@@ -44,7 +44,8 @@ func main() {
 		fmt.Println("1: send Request")
 		fmt.Println("2: HelloServerStream")
 		fmt.Println("3: HelloClientStream")
-		fmt.Println("4: exit")
+		fmt.Println("4: HelloBiStream")
+		fmt.Println("5: exit")
 		fmt.Print("please enter >")
 
 		scanner.Scan()
@@ -58,6 +59,8 @@ func main() {
 		case "3":
 			HelloClientStream()
 		case "4":
+			HelloBiStreams()
+		case "5":
 			fmt.Println("exit")
 			return
 		}
@@ -138,4 +141,54 @@ func HelloClientStream() {
 		return
 	}
 	log.Printf("Greeting: %s\n", res.GetMessage())
+}
+
+func HelloBiStreams() {
+	stream, err := client.HelloBiStreams(context.Background())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	sendNum := 5
+	sendCount := 0
+	fmt.Printf("Please enter %d names.\n", sendNum)
+	var sendEnd, recvEnd bool
+	for !(sendEnd && recvEnd) {
+		if !sendEnd {
+			scanner.Scan()
+			name := scanner.Text()
+
+			sendCount++
+
+			req := &hellopb.HelloRequest{Name: name}
+			if err := stream.Send(req); err != nil {
+				log.Fatalf("could not send: %v", err)
+				return
+			}
+
+			if sendCount == sendNum {
+				sendEnd = true
+				/*
+				client.HelloBiStreamsから得られるストリームは、SendメソッドとRecvメソッド以外にも、
+				grpc.ClientStreamインタフェースが持つメソッドセットも使うことができます。
+				CloseSendメソッドは、まさにgrpc.ClientStreamインターフェース由来のメソッドです。
+				*/
+				if err := stream.CloseSend(); err != nil {
+					fmt.Println(err)
+				}
+			}
+		}
+
+		if !recvEnd {
+			res, err := stream.Recv()
+			if errors.Is(err, io.EOF) {
+				recvEnd = true
+			} else if err != nil {
+				log.Fatalf("could not greet: %v", err)
+				return
+			}
+			log.Println(res.GetMessage())
+		}
+	}
 }

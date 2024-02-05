@@ -56,6 +56,25 @@ func (s *myServer) HelloClientStream(stream hellopb.GreetingService_HelloClientS
 	}
 }
 
+func (s *myServer) HelloBiStreams(stream hellopb.GreetingService_HelloBiStreamsServer) error {
+	for {
+		// クライアントからのリクエストを受け取るためのメソッドRecvを呼び出す
+		req, err := stream.Recv()
+		// 得られたエラーがio.EOFならばもうリクエストは送られてこない
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		log.Printf("received: %v\n", req.GetName())
+		// サーバーからのレスポンスを送信するためのメソッドSendを呼び出す
+		if err := stream.Send(&hellopb.HelloResponse{Message: fmt.Sprintf("Hello, %s!", req.GetName())}); err != nil {
+			return err
+		}
+	}
+}
+
 func NewMyServer() *myServer {
 	return &myServer{}
 }
@@ -73,6 +92,12 @@ func main() {
 	hellopb.RegisterGreetingServiceServer(server, NewMyServer())
 
 	// Register Reflection Service
+	/*-------------------------------------------------------------
+	元からprotoファイルによるメッセージ型の定義を知らないgRPCurlコマンドは、
+	代わりに「gRPCサーバーそのものから、protoファイルの情報を取得する」ことで
+	「シリアライズのルール」を知り通信します。
+	そしてその「gRPCサーバーそのものから、protoファイルの情報を取得する」ための機能がサーバーリフレクション
+	-------------------------------------------------------------*/
 	reflection.Register(server)
 
 	go func() {
